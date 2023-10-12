@@ -29,7 +29,7 @@ in the browser.
 
 This script uses the Jira REST API to extract the changelog for each issue in
 a specified Jira project. The data is stored as a CSV so it can be pulled into
- Excel to calculate average days "In Progres" for each story size in points.
+Excel to calculate average days "In Progres" for each story size in points.
 
 Basic Auth for REST APIs
 https://developer.atlassian.com/cloud/jira/platform/basic-auth-for-rest-apis/
@@ -57,10 +57,10 @@ Begin
 	$URI = 'https://waterscorporation.atlassian.net/rest/api/3'
 	$Header = 'Accept: application/json'
 
-    # used /field API to list all custom fields; story points is a custom field.
+	# used /field API to list all custom fields; story points is a custom field.
 	$PointsField = 'customfield_10201'
-    $StartState = 'In Progress'
-    $EndState = 'Verified'
+	$StartState = 'In Progress'
+	$EndState = 'Verified'
 
 
 	function AppendToPowerShellProfile
@@ -180,7 +180,7 @@ Begin
 				if ($updated -eq '') { Write-Host } else { Write-Host " since $Since" }
 			}
 
-			$page | foreach { MeasureIssues $_ }
+			$page.issues | foreach { MeasureIssue $_ }
 
 			$startAt += $page.maxResults
 			$lastPage = $page.total - $page.maxResults
@@ -190,80 +190,88 @@ Begin
 		Write-Host
 	}
 
-	function MeasureIssues
+	function MeasureIssue
 	{
-		param($page)
+		param($issue)
 		
-		$page.issues | foreach {
-			$points = $_.fields.$PointsField
-			if (![String]::IsNullOrWhiteSpace($points))
+		$points = $issue.fields.$PointsField
+		if (![String]::IsNullOrWhiteSpace($points))
+		{
+			$url = "$uri/issue/$($issue.key)/changelog"
+			$changelog = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
+
+			$item = $changelog.values | where {
+				$_.items | where { $_.field -eq 'status' -and $_.toString -eq $StartState }
+			} | select -first 1
+
+			if ($changelog.total -gt $changelog.maxResults)
 			{
-				$url = "$uri/issue/$($_.key)/changelog"
-				$changelog = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
+				# NOTE this indicates there are more pages of changelog;
+				# we may need to enhance this script to query those extra pages
+				Write-Host '+' -NoNewline
+			}
+			else
+			{
+				Write-Host '.' -NoNewline
+			}
 
+			if ($item -and $item.created)
+			{
+				$started = $item.created
+		
 				$item = $changelog.values | where {
-					$_.items | where { $_.field -eq 'status' -and $_.toString -eq $StartState }
+					$_.items | where { $_.field -eq 'status' -and $_.toString -eq $EndState }
 				} | select -first 1
-
-				if ($changelog.total -gt $changelog.maxResults)
-				{
-					# NOTE this indicates there are more pages of changelog;
-					# we may need to enhance this script to query those extra pages
-					Write-Host '+' -NoNewline
-				}
-				else {
-					Write-Host '.' -NoNewline
-				}
 
 				if ($item -and $item.created)
 				{
-					$started = $item.created
-		
-					$item = $changelog.values | where {
-						$_.items | where { $_.field -eq 'status' -and $_.toString -eq $EndState }
-					} | select -first 1
-
-					if ($item -and $item.created)
-					{
-						$verified = $item.created
-						$days = [int][Math]::Ceiling(($verified - $started).TotalDays)
-						"$($_.Key),$points,$started,$verified,$days" | Out-File -FilePath $File -Append
-					}
+					$verified = $item.created
+					$days = [int][Math]::Ceiling(($verified - $started).TotalDays)
+					"$($issue.Key),$points,$started,$verified,$days" | Out-File -FilePath $File -Append
 				}
 			}
-			else {
-				# this indicates that the issue story points are unspecified
-				Write-Host '-' -NoNewline
-			}
+		}
+		else
+		{
+			# this indicates that the issue story points are unspecified
+			Write-Host '-' -NoNewline
 		}
 	}
 }
 Process
 {
-	if ([String]::IsNullOrWhiteSpace($Email)) {
+	if ([String]::IsNullOrWhiteSpace($Email))
+ {
 		$email = $env:JIRA_EMAIL
-		if ([String]::IsNullOrWhiteSpace($Email)) {
+		if ([String]::IsNullOrWhiteSpace($Email))
+		{
 			PromptForValue 'Your email'
 		}
 	}
 
-	if ([String]::IsNullOrWhiteSpace($PAT)) {
+	if ([String]::IsNullOrWhiteSpace($PAT))
+	{
 		$PAT = $env:JIRA_PAT
-		if ([String]::IsNullOrWhiteSpace($PAT)) {
-		PromptForValue 'Your PAT'
+		if ([String]::IsNullOrWhiteSpace($PAT))
+		{
+			PromptForValue 'Your PAT'
 		}
 	}
 
-	if ([String]::IsNullOrWhiteSpace($Project)) {
+	if ([String]::IsNullOrWhiteSpace($Project))
+	{
 		$Project = $env:JIRA_PROJECT
-		if ([String]::IsNullOrWhiteSpace($Project)) {
+		if ([String]::IsNullOrWhiteSpace($Project))
+		{
 			PromptForValue 'Project key'
 		}
 	}
 
-	if (!$File) {
+	if (!$File)
+	{
 		$File = $OutputFile
-		if (Test-Path $File) {
+		if (Test-Path $File)
+		{
 			Remove-Item $File -Force -Confirm:$false
 		}
 	}
