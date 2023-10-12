@@ -195,46 +195,45 @@ Begin
 		param($issue)
 		
 		$points = $issue.fields.$PointsField
-		if (![String]::IsNullOrWhiteSpace($points))
+		if ([String]::IsNullOrWhiteSpace($points))
 		{
-			$url = "$uri/issue/$($issue.key)/changelog"
-			$changelog = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
+			# indicates that the story points are unspecified for this issue
+			Write-Host '-' -NoNewline
+			return
+		}
 
-			$item = $changelog.values | where {
-				$_.items | where { $_.field -eq 'status' -and $_.toString -eq $StartState }
-			} | select -first 1
+		$url = "$uri/issue/$($issue.key)/changelog"
+		$changelog = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
 
-			if ($changelog.total -gt $changelog.maxResults)
-			{
-				# NOTE this indicates there are more pages of changelog;
-				# we may need to enhance this script to query those extra pages
-				Write-Host '+' -NoNewline
-			}
-			else
-			{
-				Write-Host '.' -NoNewline
-			}
+		$item = $changelog.values | where {
+			$_.items | where { $_.field -eq 'status' -and $_.toString -eq $StartState }
+		} | select -first 1
 
-			if ($item -and $item.created)
-			{
-				$started = $item.created
-		
-				$item = $changelog.values | where {
-					$_.items | where { $_.field -eq 'status' -and $_.toString -eq $EndState }
-				} | select -first 1
-
-				if ($item -and $item.created)
-				{
-					$verified = $item.created
-					$days = [int][Math]::Ceiling(($verified - $started).TotalDays)
-					"$($issue.Key),$points,$started,$verified,$days" | Out-File -FilePath $File -Append
-				}
-			}
+		if ($changelog.total -gt $changelog.maxResults)
+		{
+			# NOTE this indicates there are more pages of changelog;
+			# we may need to enhance this script to query those extra pages
+			Write-Host '+' -NoNewline
 		}
 		else
 		{
-			# this indicates that the issue story points are unspecified
-			Write-Host '-' -NoNewline
+			Write-Host '.' -NoNewline
+		}
+
+		if ($item -and $item.created)
+		{
+			$started = $item.created
+	
+			$item = $changelog.values | where {
+				$_.items | where { $_.field -eq 'status' -and $_.toString -eq $EndState }
+			} | select -first 1
+
+			if ($item -and $item.created)
+			{
+				$verified = $item.created
+				$days = [int][Math]::Ceiling(($verified - $started).TotalDays)
+				"$($issue.Key),$points,$started,$verified,$days" | Out-File -FilePath $File -Append
+			}
 		}
 	}
 }
