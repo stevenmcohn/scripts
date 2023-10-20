@@ -76,6 +76,19 @@ Begin
 		if ((Get-Content $0 | select-String $key).Count -eq 0) { Add-Content $0 $command }
 	}
 
+	function CountWeekDays
+	{
+		param($start, $end)
+		$weekdays = 0
+		for ($d = $start;$d -le $end; $d = $d.AddDays(1)) {
+			if ($d.DayOfWeek -notmatch "Sunday|Saturday") {
+				$weekdays++
+			}
+		}
+		
+		return $weekdays
+	}
+	
 	function InstallChocolatey
 	{
 		# Modules/Scripts contains a better version but this is a stand-alone copy for the
@@ -157,6 +170,8 @@ Begin
 
 	function GetIssues
 	{
+		'Key,Points,Started,Verified,Days,WeekDays,Reworked,Unpassed,Unverified' | Out-File -FilePath $File
+
 		$startAt = 0
 
 		$Updated = ''
@@ -232,7 +247,35 @@ Begin
 			{
 				$verified = $item.created
 				$days = [int][Math]::Ceiling(($verified - $started).TotalDays)
-				"$($issue.Key),$points,$started,$verified,$days" | Out-File -FilePath $File -Append
+				$weekdays = CountWeekDays $started $verified
+
+				# look for backwards transitions from In Test
+				$reworked = ($changelog.values | where {
+					$_.items | where {
+						$_.field -eq 'status' -and
+						$_.fromString -eq 'In Test' -and 
+						$_.toString -notmatch 'Passed|Verified|Rejected'
+					}
+				} | measure).Count
+
+				# look for backwards transitions from Passed
+				$unpassed = ($changelog.values | where {
+					$_.items | where {
+						$_.field -eq 'status' -and
+						$_.fromString -eq 'Passed' -and 
+						$_.toString -notmatch 'Verified|Rejected'
+					}
+				} | measure).Count
+
+				# look for backwards transitions from Verified
+				$unverified = ($changelog.values | where {
+					$_.items | where {
+						$_.field -eq 'status' -and
+						$_.fromString -eq 'Verified'
+					}
+				} | measure).Count
+				
+				"$($issue.Key),$points,$started,$verified,$days,$weekdays,$reworked,$unpassed,$unverified" | Out-File -FilePath $File -Append
 			}
 		}
 	}
