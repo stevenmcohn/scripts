@@ -257,6 +257,7 @@ Begin
 						$_.toString -notmatch 'Passed|Verified|Rejected'
 					}
 				} | measure).Count
+				if ($reworked -gt 0) { $reworked = 1 }
 
 				# look for backwards transitions from Passed
 				$unpassed = ($changelog.values | where {
@@ -266,6 +267,7 @@ Begin
 						$_.toString -notmatch 'Verified|Rejected'
 					}
 				} | measure).Count
+				if ($unpassed -gt 0) { $unpassed = 1 }
 
 				# look for backwards transitions from Verified
 				$unverified = ($changelog.values | where {
@@ -274,6 +276,7 @@ Begin
 						$_.fromString -eq 'Verified'
 					}
 				} | measure).Count
+				if ($unverified -gt 0) { $unverified = 1 }
 				
 				"$($issue.Key),$points,$started,$verified,$days,$weekdays,$reworked,$unpassed,$unverified" | Out-File -FilePath $File -Append
 			}
