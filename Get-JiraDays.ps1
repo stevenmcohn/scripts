@@ -240,7 +240,7 @@ Begin
 Process
 {
 	if ([String]::IsNullOrWhiteSpace($Email))
- {
+	{
 		$email = $env:JIRA_EMAIL
 		if ([String]::IsNullOrWhiteSpace($Email))
 		{
