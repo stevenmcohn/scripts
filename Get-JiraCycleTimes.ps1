@@ -59,8 +59,8 @@ Begin
 
 	# used /field API to list all custom fields; story points is a custom field.
 	$PointsField = 'customfield_10201'
-	$StartState = 'In Progress'
-	$EndState = 'Verified'
+	$StartStatus = 'In Progress'
+	$EndStatus = 'Verified'
 
 
 	function AppendToPowerShellProfile
@@ -170,7 +170,7 @@ Begin
 
 	function GetIssues
 	{
-		'Key,Points,Started,Verified,Days,WeekDays,Reworked,Unpassed,Unverified' | Out-File -FilePath $File
+		'Key,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
 
 		$startAt = 0
 
@@ -184,14 +184,14 @@ Begin
 		do
 		{
 			$jql = [System.Web.HttpUtility]::UrlEncode(
-				"project=$Project AND issuetype=Story AND status=$EndState$updated")
+				"project=$Project AND issuetype=Story AND status=$EndStatus$updated")
 
 			$url = "$URI/search?jql=$jql&startAt=$startAt"
 			$page = curl -s --request GET --url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
 
 			if ($startAt -eq 0)
 			{
-				Write-Host "Checking $($page.total) $EndState issues from $Project" -NoNewline
+				Write-Host "Checking $($page.total) $EndStatus issues from $Project" -NoNewline
 				if ($updated -eq '') { Write-Host } else { Write-Host " since $Since" }
 			}
 
@@ -213,74 +213,97 @@ Begin
 		if ([String]::IsNullOrWhiteSpace($points))
 		{
 			# indicates that the story points are unspecified for this issue
-			Write-Host '-' -NoNewline
+			Write-Host 'x' -NoNewline
 			return
 		}
 
-		$url = "$uri/issue/$($issue.key)/changelog"
-		$changelog = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
+		Write-Host '.' -NoNewline
 
-		$item = $changelog.values | where {
-			$_.items | where { $_.field -eq 'status' -and $_.toString -eq $StartState }
-		} | select -first 1
+		$changes = GetChangeLog $issue.key
 
-		if ($changelog.total -gt $changelog.maxResults)
-		{
-			# NOTE this indicates there are more pages of changelog;
-			# we may need to enhance this script to query those extra pages
-			Write-Host '+' -NoNewline
-		}
-		else
-		{
-			Write-Host '.' -NoNewline
-		}
+		# find starting state
+		$item = $changes | where { $_.toStatus -eq $StartStatus } | select -first 1
+		if (-not $item) { Write-Host '-' -NoNewline; "$($issue.key) no start" | out-file 'issues.log' -append; return }
 
-		if ($item -and $item.created)
-		{
-			$started = $item.created
-	
-			$item = $changelog.values | where {
-				$_.items | where { $_.field -eq 'status' -and $_.toString -eq $EndState }
-			} | select -first 1
+		$started = $item.created
 
-			if ($item -and $item.created)
-			{
-				$verified = $item.created
-				$days = [int][Math]::Ceiling(($verified - $started).TotalDays)
-				$weekdays = CountWeekDays $started $verified
+		# find finished state
+		$item = $changes | where { $_.toStatus -eq $EndStatus } | select -last 1
+		if (-not $item) { Write-Host '-' -NoNewline; "$($issue.key) no end" | out-file 'issues.log' -append; return }
 
-				# look for backwards transitions from In Test
-				$reworked = ($changelog.values | where {
-					$_.items | where {
-						$_.field -eq 'status' -and
-						$_.fromString -eq 'In Test' -and 
-						$_.toString -notmatch 'Passed|Verified|Rejected'
+		$finished = $item.created
+		$days = [int][Math]::Ceiling(($finished - $started).TotalDays)
+		$weekdays = CountWeekDays $started $finished
+
+		# total in progress duration, across one or more test>prog>test transitions
+		$item = $changes | where { $_.fromStatus -eq $StartStatus } | select -last 1
+		$progress = CountWeekDays $started $item.created
+
+		# last date moved to Passed and calc days held in the Passed status
+		# this can also be considered the time it took to verify
+		$passed = $finished
+		$item = $changes | where { $_.toStatus -eq 'Passed' } | select -last 1
+		if ($item) { $passed = $item.created }
+		$passedDays = CountWeekDays $passed $finished
+
+		# last date moved to In Test and calc days held in the In Test status
+		# this can also be considered the time it took to test
+		$tested = $passed
+		$item = $changes | where { $_.toStatus -eq 'In Test' } | select -last 1
+		if ($item) { $tested = $item.created }
+		$testedDays = CountWeekDays $tested $passed
+
+		# look for backwards transitions from In Test
+		$reworked = ($changes | where {
+			$_.fromStatus -eq 'In Test' -and $_.toStatus -notmatch 'Passed|Verified|Rejected'
+		} | measure).Count
+		if ($reworked -gt 0) { $reworked = 1 }
+
+		# look for backwards transitions from Passed
+		$repassed = ($changes | where {
+			$_.fromStatus -eq 'Passed' -and $_.toStatus -notmatch 'Verified|Rejected'
+		} | measure).Count
+		if ($repassed -gt 0) { $repassed = 1 }
+
+		# look for backwards transitions from Verified
+		$reverified = ($changes | where { $_.fromStatus -eq 'Verified' } | measure).Count
+		if ($reverified -gt 0) { $reverified = 1 }
+		
+		"$($issue.Key),$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
+	}
+
+	function GetChangeLog
+	{
+		param($key)
+		$startAt = 0
+		$changes = @()
+
+		do {
+			$url = "$uri/issue/$key/changelog?startAt=$startAt"
+			$changelog = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
+
+			# grab only status changes and flatten into a custom collection
+			$changes += $changelog.values | foreach {
+				$item = $_.items | where {
+					$_.field -eq 'status' -and $_.fromString -ne $null -and $_.toString -ne $null
+				} | select -first 1
+
+				if ($item -ne $null) {
+					[PSCustomObject]@{
+						# key = $key
+						# id = $_.id
+						# author = $_.author.displayName
+						created = $_.created
+						fromStatus = $item.fromString
+						toStatus = $item.toString
 					}
-				} | measure).Count
-				if ($reworked -gt 0) { $reworked = 1 }
-
-				# look for backwards transitions from Passed
-				$unpassed = ($changelog.values | where {
-					$_.items | where {
-						$_.field -eq 'status' -and
-						$_.fromString -eq 'Passed' -and 
-						$_.toString -notmatch 'Verified|Rejected'
-					}
-				} | measure).Count
-				if ($unpassed -gt 0) { $unpassed = 1 }
-
-				# look for backwards transitions from Verified
-				$unverified = ($changelog.values | where {
-					$_.items | where {
-						$_.field -eq 'status' -and
-						$_.fromString -eq 'Verified'
-					}
-				} | measure).Count
-				if ($unverified -gt 0) { $unverified = 1 }
-				
-				"$($issue.Key),$points,$started,$verified,$days,$weekdays,$reworked,$unpassed,$unverified" | Out-File -FilePath $File -Append
+				}
 			}
-		}
+
+			$startAt += $changelog.maxResults
+
+		} while ($changelog.isLast -eq $false)
+		return $changes | sort -property created
 	}
 }
 Process
