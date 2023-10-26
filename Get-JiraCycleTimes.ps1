@@ -79,14 +79,13 @@ Begin
 	function CountWeekDays
 	{
 		param($start, $end)
-		$weekdays = 0
+		$days = ($end - $start).TotalDays
 		for ($d = $start;$d -le $end; $d = $d.AddDays(1)) {
-			if ($d.DayOfWeek -notmatch "Sunday|Saturday") {
-				$weekdays++
+			if ($d.DayOfWeek -match "Sunday|Saturday") {
+				$days -= 1.0
 			}
 		}
-		
-		return $weekdays
+		return $days
 	}
 	
 	function InstallChocolatey
@@ -233,25 +232,25 @@ Begin
 
 		$finished = $item.created
 		$days = [int][Math]::Ceiling(($finished - $started).TotalDays)
-		$weekdays = CountWeekDays $started $finished
+		$weekdays = (CountWeekDays $started $finished).ToString('0.##')
 
 		# total in progress duration, across one or more test>prog>test transitions
 		$item = $changes | where { $_.fromStatus -eq $StartStatus } | select -last 1
-		$progress = CountWeekDays $started $item.created
+		$progress = (CountWeekDays $started $item.created).ToString('0.##')
 
 		# last date moved to Passed and calc days held in the Passed status
 		# this can also be considered the time it took to verify
 		$passed = $finished
 		$item = $changes | where { $_.toStatus -eq 'Passed' } | select -last 1
 		if ($item) { $passed = $item.created }
-		$passedDays = CountWeekDays $passed $finished
+		$passedDays = (CountWeekDays $passed $finished).ToString('0.##')
 
 		# last date moved to In Test and calc days held in the In Test status
 		# this can also be considered the time it took to test
 		$tested = $passed
 		$item = $changes | where { $_.toStatus -eq 'In Test' } | select -last 1
 		if ($item) { $tested = $item.created }
-		$testedDays = CountWeekDays $tested $passed
+		$testedDays = (CountWeekDays $tested $passed).ToString('0.##')
 
 		# look for backwards transitions from In Test
 		$reworked = ($changes | where {
