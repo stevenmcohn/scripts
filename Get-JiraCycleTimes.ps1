@@ -81,7 +81,7 @@ Begin
 		param($start, $end)
 		$days = ($end - $start).TotalDays
 		for ($d = $start;$d -le $end; $d = $d.AddDays(1)) {
-			if ($d.DayOfWeek -match "Sunday|Saturday") {
+			if ($d.DayOfWeek -match "Sunday|Saturday" -and $days -gt 0) {
 				$days -= 1.0
 			}
 		}
@@ -171,6 +171,9 @@ Begin
 	{
 		'Key,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
 
+		Write-Host 'Legend: [.] OK, [+] reverified, [-] skip no start or end, [x] skip no points'
+		Write-Host
+
 		$startAt = 0
 
 		$Updated = ''
@@ -216,8 +219,6 @@ Begin
 			return
 		}
 
-		Write-Host '.' -NoNewline
-
 		$changes = GetChangeLog $issue.key
 
 		# find starting state
@@ -226,13 +227,27 @@ Begin
 
 		$started = $item.created
 
-		# find finished state
-		$item = $changes | where { $_.toStatus -eq $EndStatus } | select -last 1
+		# find first occurrence of finished state; assume multiple occurrences mean just
+		# a fix to Components or FixVersion with no actual rework
+		$item = $changes | where { $_.toStatus -eq $EndStatus } | select -first 1
 		if (-not $item) { Write-Host '-' -NoNewline; "$($issue.key) no end" | out-file 'issues.log' -append; return }
 
 		$finished = $item.created
 		$days = [int][Math]::Ceiling(($finished - $started).TotalDays)
 		$weekdays = (CountWeekDays $started $finished).ToString('0.##')
+
+		# look for backwards transitions from Verified
+		$reverified = ($changes | where { $_.fromStatus -eq 'Verified' } | measure).Count
+		if ($reverified -gt 0) { $reverified = 1 }
+
+		$marker = '.'
+
+		# ignore remaining
+		$index = $changes.indexOf($item)
+		if ($index -lt $changes.Length - 1) {
+			$marker = '+'
+			$changes = $changes[0..$index]
+		}
 
 		# total in progress duration, across one or more test>prog>test transitions
 		$item = $changes | where { $_.fromStatus -eq $StartStatus } | select -last 1
@@ -264,10 +279,8 @@ Begin
 		} | measure).Count
 		if ($repassed -gt 0) { $repassed = 1 }
 
-		# look for backwards transitions from Verified
-		$reverified = ($changes | where { $_.fromStatus -eq 'Verified' } | measure).Count
-		if ($reverified -gt 0) { $reverified = 1 }
-		
+		Write-Host $marker -NoNewline
+
 		"$($issue.Key),$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
 	}
 
