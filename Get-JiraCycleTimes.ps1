@@ -170,7 +170,7 @@ Begin
 
 	function GetIssues
 	{
-		'Team,Key,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
+		'Team,Epic,Key,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
 
 		Write-Host 'Legend: [.] OK, [+] reverified, [-] skip no start or end, [x] skip no points'
 		Write-Host
@@ -219,6 +219,11 @@ Begin
 			# indicates that the story points are unspecified for this issue
 			Write-Host 'x' -NoNewline
 			return
+		}
+		$epic = ''
+		if ($issue.fields.parent.fields.issueType.name -eq 'Epic')
+		{
+			$epic = $issue.fields.parent.key
 		}
 
 		$changes = GetChangeLog $issue.key
@@ -283,7 +288,7 @@ Begin
 
 		Write-Host $marker -NoNewline
 
-		"$team,$($issue.Key),$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
+		"$team,$epic,$($issue.Key),$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
 	}
 
 	function GetChangeLog
