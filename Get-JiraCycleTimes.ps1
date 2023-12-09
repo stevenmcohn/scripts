@@ -59,6 +59,7 @@ Begin
 
 	# used /field API to list all custom fields; story points is a custom field.
 	$PointsField = 'customfield_10201'
+	$TeamField = 'customfield_10253'
 	$StartStatus = 'In Progress'
 	$EndStatus = 'Verified'
 
@@ -169,7 +170,7 @@ Begin
 
 	function GetIssues
 	{
-		'Key,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
+		'Team,Key,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
 
 		Write-Host 'Legend: [.] OK, [+] reverified, [-] skip no start or end, [x] skip no points'
 		Write-Host
@@ -212,6 +213,7 @@ Begin
 		param($issue)
 		
 		$points = $issue.fields.$PointsField
+		$team = $issue.fields.$TeamField.Value
 		if ([String]::IsNullOrWhiteSpace($points))
 		{
 			# indicates that the story points are unspecified for this issue
@@ -281,7 +283,7 @@ Begin
 
 		Write-Host $marker -NoNewline
 
-		"$($issue.Key),$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
+		"$team,$($issue.Key),$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
 	}
 
 	function GetChangeLog
