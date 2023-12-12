@@ -190,6 +190,8 @@ Begin
 				"project=$Project AND issuetype=Story AND status=$EndStatus$updated")
 
 			$url = "$URI/search?jql=$jql&startAt=$startAt"
+			Write-Verbose $url
+
 			$page = curl -s --request GET --url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
 
 			if ($startAt -eq 0)
