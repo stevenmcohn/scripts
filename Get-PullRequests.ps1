@@ -54,7 +54,7 @@ Begin
 	function GetPullRequests
 	{
 		if (-not $Append) {
-			'User,Repo,PR,State,Commits,CComments,PComments,Created,Closed,Days' | Out-File -FilePath $File
+			'User,Repo,PR,State,Commits,Comments,Created,Closed,Days' | Out-File -FilePath $File
 		}
 
 		Write-Host
@@ -110,17 +110,17 @@ Begin
 		}
 
 		# examine commits
-		$u = $item.comments_url.Replace("/issues", "/pulls").Replace("/comments", "/commits")
-		$data = curl -s --request GET --url $u --user "$Username`:$Token" --header $Header | ConvertFrom-Json
-		$commits = $data.Length
-		$data | foreach { if ($_.author_association -eq 'NONE') { $comments = $comments - 1 } }
+		# $u = $item.comments_url.Replace("/issues", "/pulls").Replace("/comments", "/commits")
+		# $data = curl -s --request GET --url $u --user "$Username`:$Token" --header $Header | ConvertFrom-Json
+		# $commits = $data.Length
+		# $data | foreach { if ($_.author_association -eq 'NONE') { $comments = $comments - 1 } }
 
 		# examine comments
 		$data = curl -s --request GET --url $item.comments_url --user "$Username`:$Token" --header $Header | ConvertFrom-Json
-		$cc = 0
-		$data | foreach { $cc = $cc + $_.commit.comment_count }
+		$commits = 0
+		$data | foreach { $commits = $commits + $_.commit.comment_count }
 
-		"$User,$repo,$number,$state,$commits,$cc,$comments,$created,$closed,$days" | Out-File -FilePath $File -Append
+		"$User,$repo,$number,$state,$commits,$comments,$created,$closed,$days" | Out-File -FilePath $File -Append
 
 		Write-Host '.' -NoNewline
 	}

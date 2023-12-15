@@ -78,7 +78,7 @@ Begin
 		$Updated = ''
 		if ($Since)
 		{
-			$ms = ([DateTimeOffset]([DateTime]::Parse($Since))).ToUnixTimeMilliseconds()
+			$ms = ([DateTimeOffset]([DateTime]::Parse($Since))).ToString('yyyy-MM-dd')
 			$updated = " AND updated>=$ms"
 		}
 
@@ -90,6 +90,7 @@ Begin
 			$url = "$URI/search?jql=$jql&startAt=$startAt"
 			Write-Verbose $url
 
+			# to see verbose output including http header, change -s to -v
 			$page = curl -s --request GET --url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
 
 			if ($startAt -eq 0)
