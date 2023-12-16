@@ -37,7 +37,7 @@ param (
 	[string] $Token,
 	[string] $User,
 	[string] $File,
-	[swtich] $Append
+	[switch] $Append
 )
 
 Begin
@@ -92,7 +92,16 @@ Begin
 			$state = $item.state
 		}
 
+		# examine commits
+		$u = $item.comments_url.Replace("/issues", "/pulls").Replace("/comments", "/commits")
+		$data = curl -s --request GET --url $u --user "$Username`:$Token" --header $Header | ConvertFrom-Json
+		$commits = $data.Length
+
+		# adjust comments, subtracting those from automated tools
 		$comments = $item.comments
+		$data = curl -s --request GET --url $item.comments_url --user "$Username`:$Token" --header $Header | ConvertFrom-Json
+		$data | foreach { if ($_.performed_via_github_app -ne $null) { $comments = $comments - 1 } }
+
 		$created = $item.created_at
 		if (![String]::IsNullOrWhiteSpace($created)) {
 			$created = [System.TimeZone]::CurrentTimeZone.ToLocalTime($created)
@@ -108,17 +117,6 @@ Begin
 			$closed = [System.TimeZone]::CurrentTimeZone.ToLocalTime($closed)
 			$days = (CountWeekDays $created $closed).ToString('0.##')
 		}
-
-		# examine commits
-		# $u = $item.comments_url.Replace("/issues", "/pulls").Replace("/comments", "/commits")
-		# $data = curl -s --request GET --url $u --user "$Username`:$Token" --header $Header | ConvertFrom-Json
-		# $commits = $data.Length
-		# $data | foreach { if ($_.author_association -eq 'NONE') { $comments = $comments - 1 } }
-
-		# examine comments
-		$data = curl -s --request GET --url $item.comments_url --user "$Username`:$Token" --header $Header | ConvertFrom-Json
-		$commits = 0
-		$data | foreach { $commits = $commits + $_.commit.comment_count }
 
 		"$User,$repo,$number,$state,$commits,$comments,$created,$closed,$days" | Out-File -FilePath $File -Append
 
@@ -165,7 +163,7 @@ Process
 	if (!$File)
 	{
 		$File = $OutputFile
-		if (Test-Path $File)
+		if ((Test-Path $File) -and -not $Append)
 		{
 			Remove-Item $File -Force -Confirm:$false
 		}
