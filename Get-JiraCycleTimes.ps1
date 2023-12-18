@@ -68,7 +68,7 @@ Begin
 
 	function GetIssues
 	{
-		'Team,User,Epic,Key,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
+		'Team,User,Epic,Key,Type,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
 
 		Write-Host 'Legend: [.] OK, [+] reverified, [-] skip no start or end, [x] skip no points'
 		Write-Host
@@ -85,7 +85,7 @@ Begin
 		do
 		{
 			$jql = [System.Web.HttpUtility]::UrlEncode(
-				"project=$Project AND issuetype=Story AND status=$EndStatus$updated")
+				"project=$Project AND issuetype IN (Story, Defect) AND status=$EndStatus$updated")
 
 			$url = "$URI/search?jql=$jql&startAt=$startAt"
 			Write-Verbose $url
@@ -112,7 +112,8 @@ Begin
 	function MeasureIssue
 	{
 		param($issue)
-		
+
+		$type = $issue.fields.issuetype.name
 		$points = $issue.fields.$PointsField
 		$team = $issue.fields.$TeamField.Value
 		$user = $issue.fields.assignee.displayName
@@ -123,7 +124,7 @@ Begin
 			return
 		}
 		$epic = ''
-		if ($issue.fields.parent.fields.issueType.name -eq 'Epic')
+		if ($issue.fields.parent.fields.issuetype.name -eq 'Epic')
 		{
 			$epic = $issue.fields.parent.key
 		}
@@ -190,7 +191,7 @@ Begin
 
 		Write-Host $marker -NoNewline
 
-		"$team,$user,$epic,$($issue.Key),$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
+		"$team,$user,$epic,$($issue.Key),$type,$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
 	}
 
 	function GetChangeLog
