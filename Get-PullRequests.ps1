@@ -54,7 +54,7 @@ Begin
 	function GetPullRequests
 	{
 		if (-not $Append) {
-			'User,Repo,PR,State,Commits,Comments,Created,Closed,Days' | Out-File -FilePath $File
+			'User,Repo,PR,State,Commits,Post-Commits,Comments,Created,Closed,Days,Sonars' | Out-File -FilePath $File
 		}
 
 		Write-Host
@@ -96,11 +96,21 @@ Begin
 		$u = $item.comments_url.Replace("/issues", "/pulls").Replace("/comments", "/commits")
 		$data = curl -s --request GET --url $u --user "$Username`:$Token" --header $Header | ConvertFrom-Json
 		$commits = $data.Length
+		$postcommits = ($data | where { $_.commit.author.date -gt $item.created_at }).Count
 
 		# adjust comments, subtracting those from automated tools
 		$comments = $item.comments
 		$data = curl -s --request GET --url $item.comments_url --user "$Username`:$Token" --header $Header | ConvertFrom-Json
 		$data | foreach { if ($_.performed_via_github_app -ne $null) { $comments = $comments - 1 } }
+
+		$sonars = 0
+		$data | where { $_.user.login -eq 'sonarcloud[bot]' } | foreach {
+			if ($_.body -match '\[(\d+) New issues\]') {
+				if ($matches -and ($matches.count -gt 0)) {
+					$sonars = $sonars + [int]$matches[1]
+				}
+			}
+		}
 
 		$created = $item.created_at
 		if (![String]::IsNullOrWhiteSpace($created)) {
@@ -118,7 +128,7 @@ Begin
 			$days = (CountWeekDays $created $closed).ToString('0.##')
 		}
 
-		"$User,$repo,$number,$state,$commits,$comments,$created,$closed,$days" | Out-File -FilePath $File -Append
+		"$User,$repo,$number,$state,$commits,$postcommits,$comments,$created,$closed,$days,$sonars" | Out-File -FilePath $File -Append
 
 		Write-Host '.' -NoNewline
 	}
