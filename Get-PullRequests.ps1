@@ -36,6 +36,7 @@ param (
 	[string] $Username,
 	[string] $Token,
 	[string] $User,
+	[string[]] $Users,
 	[string] $File,
 	[switch] $Append
 )
@@ -50,16 +51,23 @@ Begin
 	$URI = 'https://api.github.com'
 	$Header = 'Accept: application/json'
 
+	$script:TotalCount = 0
+
 
 	function GetPullRequests
 	{
-		if (-not $Append) {
+		param(
+			[string] $usr,
+			[bool] $writeHeader
+		)
+
+		if ($writeHeader) {
 			'User,Repo,PR,State,Commits,Post-Commits,Comments,Created,Closed,Days,Sonars' | Out-File -FilePath $File
 		}
 
 		Write-Host
 
-		$url = "$URI/search/issues?q=author:$User+org:$Org+type:pr" #+sort:updated+direction:desc+per_page:99"
+		$url = "$URI/search/issues?q=author:$usr+org:$Org+type:pr" #+sort:updated+direction:desc+per_page:99"
 		Write-Verbose "$url --user ""$Username`:$Token"""
 
 		$raw = curl -s --request GET --url $url --user "$Username`:$Token" --header $Header
@@ -70,8 +78,8 @@ Begin
 			return
 		}
 
-		Write-Host "Checking $($page.total_count) PRs for $User" -NoNewline
-		$page.items | foreach { ReportItem $_ }
+		Write-Host "Checking $($page.total_count) PRs for $usr" -NoNewline
+		$page.items | foreach { ReportItem $_ $usr }
 
 		Write-Host
 	}
@@ -79,7 +87,7 @@ Begin
 
 	function ReportItem
 	{
-		param($item)
+		param($item, $usr)
 
 		$number = $item.number
 
@@ -128,9 +136,10 @@ Begin
 			$days = (CountWeekDays $created $closed).ToString('0.##')
 		}
 
-		"$User,$repo,$number,$state,$commits,$postcommits,$comments,$created,$closed,$days,$sonars" | Out-File -FilePath $File -Append
+		"$usr,$repo,$number,$state,$commits,$postcommits,$comments,$created,$closed,$days,$sonars" | Out-File -FilePath $File -Append
 
 		Write-Host '.' -NoNewline
+		$script:TotalCount = $TotalCount + 1
 	}
 }
 Process
@@ -140,7 +149,7 @@ Process
 		$Org = $env:GH_ORG
 		if ([String]::IsNullOrWhiteSpace($Org))
 		{
-			PromptForValue 'Your Github org'
+			$Org = PromptForValue 'Your Github org'
 		}
 	}
 
@@ -149,7 +158,7 @@ Process
 		$Username = $env:GH_USERNAME
 		if ([String]::IsNullOrWhiteSpace($Username))
 		{
-			PromptForValue 'Your Github username'
+			$Username = PromptForValue 'Your Github username'
 		}
 	}
 
@@ -158,17 +167,17 @@ Process
 		$Token = $env:GH_TOKEN
 		if ([String]::IsNullOrWhiteSpace($Token))
 		{
-			PromptForValue 'Your Github token'
+			$Token = PromptForValue 'Your Github token'
 		}
 	}
 
-	if ([String]::IsNullOrWhiteSpace($User))
+	if ([String]::IsNullOrWhiteSpace($User) -and
+		(-not $PSBoundParameters.ContainsKey('Users') -or $Users.Length -lt 1))
 	{
-		PromptForValue 'Github user to report'
+		$User = PromptForValue 'Github user to report'
 	}
 
 	$Org = [System.Web.HttpUtility]::UrlEncode($Org)
-	$User = [System.Web.HttpUtility]::UrlEncode($User)
 
 	if (!$File)
 	{
@@ -181,5 +190,21 @@ Process
 
 	InstallCurl
 
-	GetPullRequests
+	if ($Users -and $Users.Length -gt 0) {
+		$first = $true
+		$Users | foreach {
+			$user = [System.Web.HttpUtility]::UrlEncode($_)
+			GetPullRequests $user $first
+			$first = $false
+		}
+	}
+	else
+	{
+		$user = [System.Web.HttpUtility]::UrlEncode($User)
+		write-host "user=$user"
+		write-host "app=$append"
+		GetPullRequests $user ((-not $Append) -eq $true)
+	}
+
+	Write-Host "`nFound $TotalCount PRs"
 }
