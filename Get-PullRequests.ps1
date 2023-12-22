@@ -13,6 +13,10 @@ The path of the output CSV file, default is ./issues.csv
 The Github organization name.
 Override with $env:GH_ORG
 
+.PARAMETER Since
+Filters PRs since the given date. The parameter value must be a valid
+date string that can be parsed by the DateTime class.
+
 .PARAMETER Token
 Your personal Github access token, created from your Github account.
 Override with $env:GH_TOKEN
@@ -37,6 +41,7 @@ param (
 	[string] $Token,
 	[string] $User,
 	[string[]] $Users,
+	[string] $Since,
 	[string] $File,
 	[switch] $Append
 )
@@ -52,7 +57,7 @@ Begin
 	$Header = 'Accept: application/json'
 
 	$script:TotalCount = 0
-
+	$script:lastUpdated = '2000-01-01T01:01:01Z'
 
 	function GetPullRequests
 	{
@@ -62,7 +67,7 @@ Begin
 		)
 
 		if ($writeHeader) {
-			'User,Repo,PR,State,Commits,Post-Commits,Comments,Created,Closed,Days,Sonars' | Out-File -FilePath $File
+			'User,Repo,PR,State,Commits,Post-Commits,Comments,Created,Closed,Updated,Days,Sonars' | Out-File -FilePath $File
 		}
 
 		Write-Host
@@ -78,8 +83,10 @@ Begin
 			return
 		}
 
-		Write-Host "Checking $($page.total_count) PRs for $usr" -NoNewline
-		$page.items | foreach { ReportItem $_ $usr }
+		$items = $page.items | where { $_.updated_at -ge $Since }
+
+		Write-Host "Checking $($items.Count) out of $($page.total_count) PRs for $usr" -NoNewline
+		$items | foreach { ReportItem $_ $usr }
 
 		Write-Host
 	}
@@ -136,7 +143,13 @@ Begin
 			$days = (CountWeekDays $created $closed).ToString('0.##')
 		}
 
-		"$usr,$repo,$number,$state,$commits,$postcommits,$comments,$created,$closed,$days,$sonars" | Out-File -FilePath $File -Append
+		$updated = $item.updated_at
+		if ($updated -gt $lastUpdated)
+		{
+			$script:lastUpdated = $updated
+		}
+
+		"$usr,$repo,$number,$state,$commits,$postcommits,$comments,$created,$closed,$updated,$days,$sonars" | Out-File -FilePath $File -Append
 
 		Write-Host '.' -NoNewline
 		$script:TotalCount = $TotalCount + 1
@@ -179,6 +192,11 @@ Process
 
 	$Org = [System.Web.HttpUtility]::UrlEncode($Org)
 
+	if ($Since)
+	{
+		$script:Since = ([DateTimeOffset]([DateTime]::Parse($Since))).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+	}
+
 	if (!$File)
 	{
 		$File = $OutputFile
@@ -206,5 +224,5 @@ Process
 		GetPullRequests $user ((-not $Append) -eq $true)
 	}
 
-	Write-Host "`nFound $TotalCount PRs"
+	Write-Host "`nFound $TotalCount PRs. Most recently updated: $lastUpdated"
 }
