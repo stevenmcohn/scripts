@@ -262,7 +262,9 @@ Begin
 			$board.values | where { $_.startDate -gt $window } | sort -property startDate | foreach {
 				# clean multi-line, commas, bullets from goal for CSV
 				$goal = $_.goal -replace "`n|`r|,|^[^\w]*",''
-				"$name,$($_.name),$($_.startDate),$($_.endDate),$goal" | Out-File -FilePath $SprintsFile -Append
+				$startDate = [DateTime]::Parse($_.startDate).ToLocalTime()
+				$endDate = [DateTime]::Parse($_.endDate).ToLocalTime()
+				"$name,$($_.name),$startDate,$endDate,$goal" | Out-File -FilePath $SprintsFile -Append
 			}
 		}
 	}
