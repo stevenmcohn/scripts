@@ -4,7 +4,7 @@ Export CSV of Github pull requests, including number of comments, commits, etc.
 
 .PARAMETER Append
 Specify this switch to append to the output file rather than recreate it.
-Makes it easy to append multiple users to a single file.
+Makes it easy to append to a single file when using the User parameter.
 
 .PARAMETER File
 The path of the output CSV file, default is ./issues.csv
@@ -15,18 +15,23 @@ Override with $env:GH_ORG
 
 .PARAMETER Since
 Filters PRs since the given date. The parameter value must be a valid
-date string that can be parsed by the DateTime class.
+date string that can be parsed by the DateTime class, e.g. "12-JAN-2024"
 
 .PARAMETER Token
 Your personal Github access token, created from your Github account.
 Override with $env:GH_TOKEN
 
 .PARAMETER User
-The Github user to report
+A single Github user account name to report. For multiple users in a single
+file, add the Append parameter for subsequent calls after the first user.
 
 .PARAMETER Username
 Your Github account username used for authentication.
 Override with $env:GH_USERNAME
+
+.PARAMETER Users
+A collection of GitHub user account names to collate into a single file.
+This is a faster way of using [-User] followed by [-User -Append]
 
 .DESCRIPTION
 blah
