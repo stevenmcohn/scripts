@@ -21,6 +21,10 @@ Override with $env:JIRA_PROJECT
 Filters issues since the given date. The parameter value must be a valid
 date string that can be parsed by the DateTime class.
 
+.PARAMETER Sprints
+Collect the lasat 6 months of sprints and write those to a separate file.
+The filename is $File-sprints.csv
+
 .DESCRIPTION
 Jira Cloud export feature does not include the changelog associated with each
 issue and there is no way to query the changelog to determine when issues
@@ -46,7 +50,8 @@ param (
 	[string] $PAT,
 	[string] $Project,
 	[string] $Since,
-	[string] $File
+	[string] $File,
+	[switch] $Sprints
 )
 
 Begin
@@ -56,7 +61,9 @@ Begin
 	# SETTINGS...
 
 	$OutputFile = './issues.csv'
+	$SprintsFile = './sprints.csv'
 	$URI = 'https://waterscorporation.atlassian.net/rest/api/3'
+	$ARI = 'https://waterscorporation.atlassian.net/rest/agile/1.0'
 	$Header = 'Accept: application/json'
 
 	# used /field API to list all custom fields; story points is a custom field.
@@ -227,6 +234,38 @@ Begin
 		} while ($changelog.isLast -eq $false)
 		return $changes | sort -property created
 	}
+
+	function GetSprints
+	{
+		Write-Host
+		Write-Host "... Reporting six months of sprint to $SprintsFile"
+
+		if (Test-Path $SprintsFile)
+		{
+			Remove-Item $SprintsFile -Force -Confirm:$false
+		}
+
+		# last 6 months
+		$window = (Get-Date).AddMonths(-6).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+
+		$url = "$ARI/board?projectKeyOrId=$($Project.toUpper())&type=scrum"
+		$boards = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
+
+		'Board,Sprint,StartDt,EndDt,Goal' | Out-File -FilePath $SprintsFile
+
+		$boards.values | foreach {
+			$name = $_.name
+
+			$url = "$($_.self)/sprint?state=active,closed"
+			$board = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
+
+			$board.values | where { $_.startDate -gt $window } | sort -property startDate | foreach {
+				# clean multi-line, commas, bullets from goal for CSV
+				$goal = $_.goal -replace "`n|`r|,|^[^\w]*",''
+				"$name,$($_.name),$($_.startDate),$($_.endDate),$goal" | Out-File -FilePath $SprintsFile -Append
+			}
+		}
+	}
 }
 Process
 {
@@ -257,7 +296,17 @@ Process
 		}
 	}
 
-	if (!$File)
+	if ($File)
+	{
+		$dir = Split-Path $File
+		if ($dir -eq '') {
+			$SprintsFile = "$(Split-Path $File -LeafBase)-sprints.csv"
+		}
+		else {
+			$SprintsFile = Join-Path (Split-Path $File) "$(Split-Path $File -LeafBase)-sprints.csv"
+		}
+	}
+	else
 	{
 		$File = $OutputFile
 		if (Test-Path $File)
@@ -269,4 +318,9 @@ Process
 	InstallCurl
 
 	GetIssues
+
+	if ($Sprints)
+	{
+		GetSprints
+	}
 }
