@@ -22,7 +22,7 @@ Filters issues since the given date. The parameter value must be a valid
 date string that can be parsed by the DateTime class.
 
 .PARAMETER Sprints
-Collect the lasat 6 months of sprints and write those to a separate file.
+Collect the last 6 months of sprints and write those to a separate file.
 The filename is $File-sprints.csv
 
 .DESCRIPTION
@@ -178,7 +178,8 @@ Begin
 
 		# ignore remaining
 		$index = $changes.indexOf($item)
-		if ($index -lt $changes.Length - 1) {
+		if ($index -lt $changes.Length - 1)
+		{
 			$marker = '+'
 			$changes = $changes[0..$index]
 		}
@@ -203,14 +204,14 @@ Begin
 
 		# look for backwards transitions from In Test
 		$reworked = ($changes | where {
-			$_.fromStatus -eq 'In Test' -and $_.toStatus -notmatch 'Passed|Verified|Rejected'
-		} | measure).Count
+				$_.fromStatus -eq 'In Test' -and $_.toStatus -notmatch 'Passed|Verified|Rejected'
+			} | measure).Count
 		if ($reworked -gt 0) { $reworked = 1 }
 
 		# look for backwards transitions from Passed
 		$repassed = ($changes | where {
-			$_.fromStatus -eq 'Passed' -and $_.toStatus -notmatch 'Verified|Rejected'
-		} | measure).Count
+				$_.fromStatus -eq 'Passed' -and $_.toStatus -notmatch 'Verified|Rejected'
+			} | measure).Count
 		if ($repassed -gt 0) { $repassed = 1 }
 
 		Write-Host $marker -NoNewline
@@ -224,7 +225,8 @@ Begin
 		$startAt = 0
 		$changes = @()
 
-		do {
+		do
+		{
 			$url = "$uri/issue/$key/changelog?startAt=$startAt"
 			$changelog = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
 
@@ -234,14 +236,15 @@ Begin
 					$_.field -eq 'status' -and $_.fromString -ne $null -and $_.toString -ne $null
 				} | select -first 1
 
-				if ($item -ne $null) {
+				if ($item -ne $null)
+				{
 					[PSCustomObject]@{
 						# key = $key
 						# id = $_.id
 						# author = $_.author.displayName
-						created = $_.created
+						created    = $_.created
 						fromStatus = $item.fromString
-						toStatus = $item.toString
+						toStatus   = $item.toString
 					}
 				}
 			}
@@ -262,8 +265,15 @@ Begin
 			Remove-Item $SprintsFile -Force -Confirm:$false
 		}
 
-		# last 6 months
-		$window = (Get-Date).AddMonths(-6).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+		if ($since)
+		{
+			$window = $since
+		}
+		else
+		{
+			# last 6 months
+			$window = (Get-Date).AddMonths(-6).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+		}
 
 		$url = "$ARI/board?projectKeyOrId=$($Project.toUpper())&type=scrum"
 		$boards = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
@@ -277,11 +287,22 @@ Begin
 			$board = curl -s --request GET -url $url --user "$email`:$PAT" --header $Header | ConvertFrom-Json
 
 			$board.values | where { $_.startDate -gt $window } | sort -property startDate | foreach {
+				# extract sprint name without team, match on SCP 'Sprint n' or Scalars '2024Q1.3'
+				$mats = ([regex]'Sprint \d+|\d{4}Q\d+\.\d+').Matches($_.name)
+				if ($mats.Count -gt 0)
+				{
+					# if story was in multiple sprints, choose latest one
+					$sprint = ($mats | sort | select -last 1).Value
+				}
+				else
+				{
+					$sprint = 'sprint'
+				}
 				# clean multi-line, commas, bullets from goal for CSV
-				$goal = $_.goal -replace "`n|`r|,|^[^\w]*",''
+				$goal = $_.goal -replace "`n|`r|,|^[^\w]*", ''
 				$startDate = [DateTime]::Parse($_.startDate).ToLocalTime()
 				$endDate = [DateTime]::Parse($_.endDate).ToLocalTime()
-				"$name,$($_.name),$startDate,$endDate,$goal" | Out-File -FilePath $SprintsFile -Append
+				"$name,$sprint,$startDate,$endDate,$goal" | Out-File -FilePath $SprintsFile -Append
 			}
 		}
 	}
@@ -318,10 +339,12 @@ Process
 	if ($File)
 	{
 		$dir = Split-Path $File
-		if ($dir -eq '') {
+		if ($dir -eq '')
+		{
 			$SprintsFile = "$(Split-Path $File -LeafBase)-sprints.csv"
 		}
-		else {
+		else
+		{
 			$SprintsFile = Join-Path (Split-Path $File) "$(Split-Path $File -LeafBase)-sprints.csv"
 		}
 	}
@@ -336,10 +359,12 @@ Process
 
 	InstallCurl
 
-	GetIssues
-
 	if ($Sprints)
 	{
 		GetSprints
+	}
+	else
+	{
+		GetIssues
 	}
 }
