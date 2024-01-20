@@ -68,6 +68,7 @@ Begin
 
 	# used /field API to list all custom fields; story points is a custom field.
 	$PointsField = 'customfield_10201'
+	$SprintField = 'customfield_10020'
 	$TeamField = 'customfield_10253'
 	$StartStatus = 'In Progress'
 	$EndStatus = 'Verified'
@@ -75,7 +76,7 @@ Begin
 
 	function GetIssues
 	{
-		'Team,User,Epic,Key,Type,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
+		'Team,Sprint,User,Epic,Key,Type,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
 
 		Write-Host 'Legend: [.] OK, [+] reverified, [-] skip no start or end, [x] skip no points'
 		Write-Host
@@ -120,16 +121,32 @@ Begin
 	{
 		param($issue)
 
-		$type = $issue.fields.issuetype.name
 		$points = $issue.fields.$PointsField
-		$team = $issue.fields.$TeamField.Value
-		$user = $issue.fields.assignee.displayName
 		if ([String]::IsNullOrWhiteSpace($points))
 		{
 			# indicates that the story points are unspecified for this issue
 			Write-Host 'x' -NoNewline
 			return
 		}
+
+		$type = $issue.fields.issuetype.name
+		$sprint = $issue.fields.$SprintField.name
+		$team = $issue.fields.$TeamField.value
+		$user = $issue.fields.assignee.displayName
+
+		# extract sprint name without team, match on SCP 'Sprint n' or Scalars '2024Q1.3'
+		$mats = ([regex]'Sprint \d+|\d{4}Q\d+\.\d+').Matches($sprint)
+		if ($mats.Count -gt 0)
+		{
+			# if story was in multiple sprints, choose latest one
+			$sprint = ($mats | sort | select -last 1).Value
+		}
+		else
+		{
+			Write-Host 't' -NoNewline
+			return
+		}
+
 		$epic = ''
 		if ($issue.fields.parent.fields.issuetype.name -eq 'Epic')
 		{
@@ -198,7 +215,7 @@ Begin
 
 		Write-Host $marker -NoNewline
 
-		"$team,$user,$epic,$($issue.Key),$type,$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
+		"$team,$sprint,$user,$epic,$($issue.Key),$type,$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
 	}
 
 	function GetChangeLog
