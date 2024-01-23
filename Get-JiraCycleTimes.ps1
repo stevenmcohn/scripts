@@ -23,7 +23,8 @@ date string that can be parsed by the DateTime class.
 
 .PARAMETER Sprints
 Collect the last 6 months of sprints and write those to a separate file.
-The filename is $File-sprints.csv
+The filename is sprints.csv. This is mutually exclusive with all other
+parameters. If specified, this file is generated and the script exits.
 
 .DESCRIPTION
 Jira Cloud export feature does not include the changelog associated with each
@@ -76,7 +77,12 @@ Begin
 
 	function GetIssues
 	{
-		'Team,Sprint,User,Epic,Key,Type,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
+		if (Test-Path $File)
+		{
+			Remove-Item $File -Force -Confirm:$false
+		}
+
+		'Sprint,Team,User,Epic,Key,Type,Points,StartedDt,InTestDt,PassedDt,VerifiedDt,Days,WeekDays,InProgress,InTest,Passed,Reworked,Repassed,Reverified' | Out-File -FilePath $File
 
 		Write-Host 'Legend: [.] OK, [+] reverified, [-] skip no start or end, [x] skip no points'
 		Write-Host
@@ -216,7 +222,7 @@ Begin
 
 		Write-Host $marker -NoNewline
 
-		"$team,$sprint,$user,$epic,$($issue.Key),$type,$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
+		"$sprint,$team,$user,$epic,$($issue.Key),$type,$points,$started,$tested,$passed,$finished,$days,$weekdays,$progress,$testedDays,$passedDays,$reworked,$repassed,$reverified" | Out-File -FilePath $File -Append
 	}
 
 	function GetChangeLog
@@ -351,10 +357,6 @@ Process
 	else
 	{
 		$File = $OutputFile
-		if (Test-Path $File)
-		{
-			Remove-Item $File -Force -Confirm:$false
-		}
 	}
 
 	InstallCurl
